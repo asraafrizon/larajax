@@ -17,3 +17,7 @@ Route::get('/', function () {
 
 Route::resource('contact', 'ContactController');
 Route::get('api/contact', 'ContactController@apiContact')->name('api.contact');
+Route::get('exportpdf', 'ContactController@exportPDF')->name('export.pdf');
+Auth::routes();
+
+Route::get('/home', 'HomeController@index')->name('home');

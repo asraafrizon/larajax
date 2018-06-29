@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Mockery\Exception;
 use Yajra\DataTables\DataTables;
+use PDF;
 
 use App\Contact;
-
+use App\Category;
 class ContactController extends Controller
 {
     /**
@@ -16,17 +18,8 @@ class ContactController extends Controller
      */
     public function index()
     {
-        return view('welcome');
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function create()
-    {
         //
+        return view('welcome');
     }
 
     /**
@@ -35,14 +28,25 @@ class ContactController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
+
+
     public function store(Request $request)
     {
-        $data = [
-            'name' => $request['name'],
-            'email' => $request['email']
-        ];
+        $input = $request->all();
+        $input['photo'] = null;
 
-        return Contact::create($data);
+        if ($request->hasFile('photo')){
+            $input['photo'] = '/upload/photo/'.str_slug($input['name'], '-').'.'.$request->photo->getClientOriginalExtension();
+            $request->photo->move(public_path('/upload/photo/'), $input['photo']);
+        }
+
+        Contact::create($input);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contact Created'
+
+        ]);
     }
 
     /**
@@ -64,7 +68,7 @@ class ContactController extends Controller
      */
     public function edit($id)
     {
-        $contact = Contact::find($id);
+        $contact = Contact::findOrFail($id);
         return $contact;
     }
 
@@ -77,7 +81,25 @@ class ContactController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $input = $request->all();
+        $contact = Contact::findOrFail($id);
+
+        $input['photo'] = $contact->photo;
+
+        if ($request->hasFile('photo')){
+            if (!$contact->photo == NULL){
+                unlink(public_path($contact->photo));
+            }
+            $input['photo'] = '/upload/photo/'.str_slug($input['name'], '-').'.'.$request->photo->getClientOriginalExtension();
+            $request->photo->move(public_path('/upload/photo/'), $input['photo']);
+        }
+
+        $contact->update($input);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contact Updated'
+        ]);
     }
 
     /**
@@ -88,19 +110,46 @@ class ContactController extends Controller
      */
     public function destroy($id)
     {
-        //
+        $contact = Contact::findOrFail($id);
+
+        if (!$contact->photo == NULL){
+            unlink(public_path($contact->photo));
+        }
+
+        Contact::destroy($id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contact Deleted'
+        ]);
     }
 
     public function apiContact()
     {
         $contact = Contact::all();
-        
-        return DataTables::of($contact)
-            ->addColumn('action', function($contact){
-                return '<a href="#" class="btn btn-info btn-xs"><i class="glyphicon glyphicon-eye-open"></i> Show </a>'.
-                        '<a onclick="editForm('. $contact->id.')" class="btn btn-primary btn-xs"><i class="glyphicon glyphicon-edit"></i> Edit </a>'.
-                        '<a onclick="deleteForm('. $contact->id.')" class="btn btn-danger btn-xs"><i class="glyphicon glyphicon-trash"></i> Delete </a>';
 
-            })->make(true);
+        return Datatables::of($contact)
+        ->addColumn('show_photo', function($contact){
+            if ($contact->photo == NULL){
+                return 'No Image';
+            }
+            return '<img class="rounded-square" width="50" height="50" src="'. url($contact->photo) .'" alt="">';
+        })
+        ->addColumn('action', function($contact){
+            return '<a href="#" class="btn btn-info btn-xs"><i class="glyphicon glyphicon-eye-open"></i> Show</a> ' .
+            '<a onclick="editForm('. $contact->id .')" class="btn btn-primary btn-xs"><i class="glyphicon glyphicon-edit"></i> Edit</a> ' .
+            '<a onclick="deleteData('. $contact->id .')" class="btn btn-danger btn-xs"><i class="glyphicon glyphicon-trash"></i> Delete</a>';
+        })
+        ->rawColumns(['show_photo', 'action'])->make(true);
+    }
+
+    public function exportPDF()
+    {
+        $contact = Contact::all();
+        $pdf = PDF::loadView('pdf', compact('contact'));
+        $pdf->setPaper('a4', 'potrait');
+
+        return $pdf->stream();
+
     }
 }
